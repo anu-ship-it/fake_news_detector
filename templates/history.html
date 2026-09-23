@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block body %}
+<header>
+  <h1>Analysis <em>history</em></h1>
+  <p>Every article analysed through this app is stored in a local SQLite database.</p>
+  <div class="stats">
+    <div class="stat"><b>{{ s.total }}</b><small>Total analysed</small></div>
+    <div class="stat"><b style="color:var(--fake)">{{ s.fake }}</b><small>Flagged fake</small></div>
+    <div class="stat"><b style="color:var(--real)">{{ s.real }}</b><small>Judged real</small></div>
+  </div>
+</header>
+<main>
+  <section class="card">
+    {% if rows %}
+    <table>
+      <thead><tr><th>Time</th><th>Source</th><th>Content</th><th>Verdict</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr><td>{{ r.time }}</td><td>{{ r.source }}</td><td>{{ r.preview }}</td>
+            <td><span class="badge small {{ r.label }}">{{ r.label }}</span></td><td>{{ r.confidence }}%</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('clear_history') }}" style="margin-top:16px">
+      <button class="danger" type="submit">Clear history</button>
+    </form>
+    {% else %}
+    <p class="note">Nothing analysed yet. Go to the Detector page and analyse an article.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}TruthLens{% endblock %} - AI Fake News Detection</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav>
+  <div class="logo">Truth<span>Lens</span></div>
+  <div>
+    <a href="{{ url_for('home') }}" class="{{ 'on' if page=='home' }}">Detector</a>
+    <a href="{{ url_for('trending') }}" class="{{ 'on' if page=='trending' }}">Trending News</a>
+    <a href="{{ url_for('insights') }}" class="{{ 'on' if page=='insights' }}">Model Insights</a>
+    <a href="{{ url_for('history') }}" class="{{ 'on' if page=='history' }}">History</a>
+  </div>
+</nav>
+{% block body %}{% endblock %}
+<footer>TruthLens - AI Fake News Detection System | Python, scikit-learn, Flask, SQLite | College Project</footer>
+</body>
+</html>

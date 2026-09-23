@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Trending News{% endblock %}
+{% block body %}
+<header>
+  <h1>Today's <em>trending news</em>, screened</h1>
+  <p>Headlines are pulled live from public news feeds and run through the model to flag suspicious
+     writing style.</p>
+  <div class="stats">
+    <div class="stat"><b id="s-total">-</b><small>Headlines checked</small></div>
+    <div class="stat"><b id="s-fake" style="color:var(--fake)">-</b><small>Suspicious style</small></div>
+    <div class="stat"><b id="s-real" style="color:var(--real)">-</b><small>Credible style</small></div>
+  </div>
+</header>
+<main>
+  {% if b.demo %}
+  <div class="banner">Demo mode: the model is trained on a tiny sample, so these results are not meaningful.
+  Add the Kaggle dataset, delete <code>model.pkl</code> and restart.</div>
+  {% endif %}
+
+  <section class="card">
+    <div class="toolbar">
+      <select id="source">
+        <option value="all">All sources</option>
+        {% for f in feeds %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+      </select>
+      <button class="primary" id="refresh" onclick="load(true)">Refresh</button>
+    </div>
+    <div class="filters">
+      <button class="tab on" data-f="all" onclick="setFilter('all')">All</button>
+      <button class="tab" data-f="FAKE" onclick="setFilter('FAKE')">Suspicious</button>
+      <button class="tab" data-f="REAL" onclick="setFilter('REAL')">Credible</button>
+    </div>
+    <div class="error" id="err"></div>
+    <div id="list"><div class="loading">Loading headlines...</div></div>
+    <p class="note" style="margin-top:18px"><b>How to read this:</b> the model was trained on full articles, so a
+    headline-only verdict is rough. "Suspicious" means the wording resembles fake-news writing, not that the
+    story is false. Established outlets will mostly pass, since the model checks style, not facts.</p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let items = [], filter = "all";
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function setFilter(f){
+  filter = f;
+  document.querySelectorAll(".filters .tab").forEach(b => b.className = "tab" + (b.dataset.f===f ? " on" : ""));
+  render();
+}
+
+function render(){
+  const shown = items.filter(i => filter==="all" || i.label===filter);
+  if(!shown.length){ $("list").innerHTML = '<div class="loading">No headlines to show.</div>'; return; }
+  $("list").innerHTML = shown.map(i => {
+    const idx = items.indexOf(i);
+    const canDeep = i.link && !i.link.includes("news.google.com");
+    return `<div class="news" id="n${idx}">
+      <div class="top">
+        <h4>${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a>` : esc(i.title)}</h4>
+        <span class="tag ${i.label}">${i.label==="FAKE" ? "Suspicious" : "Credible"} ${i.confidence}%</span>
+      </div>
+      <div class="meta">${esc(i.source)}${i.published ? " | " + esc(i.published) : ""}${i.short ? " | very short text, low reliability" : ""}</div>
+      ${i.summary ? `<div class="note">${esc(i.summary)}</div>` : ""}
+      ${i.flags.map(f => `<span class="chip f">${esc(f)}</span>`).join("")}
+      ${canDeep ? `<div class="deep"><button class="ghost" onclick="deep(${idx})">Deep check full article</button> <span id="d${idx}"></span></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+async function load(force){
+  $("err").style.display = "none";
+  $("list").innerHTML = '<div class="loading">Loading headlines...</div>';
+  $("refresh").disabled = true;
+  try{
+    const res = await fetch(`/api/trending?source=${encodeURIComponent($("source").value)}${force ? "&refresh=1" : ""}`);
+    const d = await res.json();
+    if(!res.ok){ $("err").textContent = d.error; $("err").style.display = "block"; return; }
+    items = d.items;
+    $("s-total").textContent = d.counts.total; $("s-fake").textContent = d.counts.fake; $("s-real").textContent = d.counts.real;
+    const failed = Object.keys(d.errors);
+    if(failed.length){ $("err").textContent = "Could not load: " + failed.join(", ") + " (" + Object.values(d.errors)[0] + ")"; $("err").style.display = "block"; }
+    render();
+  }catch(e){
+    $("list").innerHTML = '<div class="loading">Could not reach the server.</div>';
+  }finally{ $("refresh").disabled = false; }
+}
+
+async function deep(idx){
+  const out = $("d"+idx); out.textContent = "Downloading article...";
+  try{
+    const res = await fetch("/analyze", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url: items[idx].link})});
+    const d = await res.json();
+    out.textContent = res.ok ? `Full article: ${d.label === "FAKE" ? "Suspicious" : "Credible"} (${d.confidence}%)` : d.error;
+  }catch(e){ out.textContent = "Request failed."; }
+}
+
+$("source").addEventListener("change", () => load(false));
+load(false);
+</script>
+{% endblock %}

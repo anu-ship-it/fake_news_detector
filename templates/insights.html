@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Model Insights{% endblock %}
+{% block body %}
+<header>
+  <h1>Model <em>insights</em></h1>
+  <p>How the models were trained, compared and evaluated.</p>
+  <div class="stats">
+    <div class="stat"><b>{{ "{:,}".format(b.train_size) }}</b><small>Training articles (80%)</small></div>
+    <div class="stat"><b>{{ "{:,}".format(b.test_size) }}</b><small>Test articles (20%)</small></div>
+    <div class="stat"><b>{{ b.trained_at }}</b><small>Trained on</small></div>
+  </div>
+</header>
+<main>
+  {% if b.demo %}
+  <div class="banner">Demo mode: these numbers come from a tiny built-in sample and are not meaningful.
+  Add the Kaggle dataset, delete <code>model.pkl</code> and restart.</div>
+  {% endif %}
+
+  <section class="card">
+    <h2>Model comparison</h2>
+    <table>
+      <thead><tr><th>Model</th><th>CV acc.</th><th>Test acc.</th><th>Precision</th><th>Recall</th><th>F1</th><th>AUC</th><th>Time</th></tr></thead>
+      <tbody>
+      {% for r in b.results %}
+        <tr class="{{ 'best' if r.name==b.best_name }}">
+          <td>{{ r.name }}{% if r.name==b.best_name %} (selected){% endif %}</td>
+          <td>{{ r.cv_accuracy }}%</td><td>{{ r.accuracy }}%</td><td>{{ r.precision }}%</td>
+          <td>{{ r.recall }}%</td><td>{{ r.f1 }}%</td><td>{{ r.auc }}</td><td>{{ r.seconds }}s</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:12px">The model is selected using 3-fold cross-validation on the
+    training data only, so the test set stays unseen until final evaluation.</p>
+  </section>
+
+  <section class="card">
+    <h2>Evaluation charts</h2>
+    <div class="charts">
+      <img src="{{ url_for('static', filename='charts/model_comparison.png') }}" alt="Model comparison">
+      <img src="{{ url_for('static', filename='charts/confusion_matrix.png') }}" alt="Confusion matrix">
+      <img src="{{ url_for('static', filename='charts/roc_curve.png') }}" alt="ROC curves">
+      <img src="{{ url_for('static', filename='charts/top_words.png') }}" alt="Top words">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Technology stack</h2>
+    {% for t in ["Python 3","scikit-learn","pandas","NumPy","Matplotlib","Flask","Jinja2","SQLite","joblib","BeautifulSoup","TF-IDF n-grams","REST API (JSON)"] %}
+      <span class="chip t">{{ t }}</span>
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}

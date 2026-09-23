@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Detector{% endblock %}
+{% block body %}
+<header>
+  <h1>Detect <em>fake news</em> with machine learning</h1>
+  <p>Paste an article or a link. Four ML models analyse its language, compare their verdicts and
+     explain which words and writing patterns drove the result.</p>
+  <div class="stats">
+    <div class="stat"><b>{{ best.accuracy }}%</b><small>Test accuracy</small></div>
+    <div class="stat"><b>{{ "{:,}".format(b.samples) }}</b><small>Articles used</small></div>
+    <div class="stat"><b>{{ b.best_name }}</b><small>Best model</small></div>
+    <div class="stat"><b>{{ best.auc }}</b><small>ROC-AUC</small></div>
+  </div>
+</header>
+
+<main>
+  {% if b.demo %}
+  <div class="banner">Demo mode: <code>data/True.csv</code> and <code>data/Fake.csv</code> were not found, so the
+  models were trained on a tiny built-in sample. Add the Kaggle files, delete <code>model.pkl</code> and restart
+  for real results.</div>
+  {% endif %}
+
+  <section class="card">
+    <h2>Analyse a news article</h2>
+    <div class="tabs">
+      <button class="tab on" id="tab-text" onclick="setMode('text')">Paste text</button>
+      <button class="tab" id="tab-url" onclick="setMode('url')">From URL</button>
+    </div>
+    <textarea id="text" placeholder="Paste a headline or full article here..."></textarea>
+    <input type="text" id="url" placeholder="https://example.com/news/article" style="display:none">
+    <div class="row">
+      <button class="primary" id="go" onclick="analyze()">Analyse</button>
+      <button class="ghost" onclick="fill(0)">Fake example</button>
+      <button class="ghost" onclick="fill(1)">Real example</button>
+      <button class="ghost" onclick="clearAll()">Clear</button>
+    </div>
+    <div class="error" id="err"></div>
+  </section>
+
+  <section class="card" id="result">
+    <div class="verdict">
+      <div class="badge" id="badge"></div>
+      <div><div class="note">Confidence (<span id="mname"></span>)</div>
+           <div id="conf" style="font-size:1.4rem;font-weight:700"></div></div>
+    </div>
+    <div class="bar"><div id="fill"></div></div>
+    <p class="note" id="preview" style="margin-top:12px"></p>
+
+    <h3>Model agreement</h3>
+    <table><thead><tr><th>Model</th><th>Verdict</th><th>Confidence</th></tr></thead><tbody id="votes"></tbody></table>
+
+    <h3>Writing-style signals</h3>
+    <div class="grid" id="signals"></div>
+    <ul class="flags" id="flags"></ul>
+
+    <div class="cols">
+      <div><h3>Words pointing to FAKE</h3><div id="fw"></div></div>
+      <div><h3>Words pointing to REAL</h3><div id="rw"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step"><b>1. Clean</b><p>Lowercase, strip links, source tags, symbols.</p></div>
+      <div class="step"><b>2. Vectorise</b><p>TF-IDF with word pairs (n-grams) turns text into numbers.</p></div>
+      <div class="step"><b>3. Compare</b><p>Four models are trained and ranked by cross-validation.</p></div>
+      <div class="step"><b>4. Explain</b><p>Top words and style signals are shown with each verdict.</p></div>
+    </div>
+    <p class="note" style="margin-top:16px"><b>Limitation:</b> the system detects writing style, not factual
+    truth. Use it as a screening aid, not a fact-checker. Word chips come from Logistic Regression
+    coefficients.</p>
+  </section>
+</main>
+
+<script>
+const samples = [
+  "SHOCKING: Doctors HATE this one weird trick that cures every disease overnight, government is hiding the truth!!!",
+  "The central bank held interest rates steady on Wednesday, citing stable inflation figures, officials said."
+];
+const $ = id => document.getElementById(id);
+let mode = "text";
+
+function setMode(m){
+  mode = m;
+  $("tab-text").className = "tab" + (m==="text" ? " on" : "");
+  $("tab-url").className  = "tab" + (m==="url" ? " on" : "");
+  $("text").style.display = m==="text" ? "block" : "none";
+  $("url").style.display  = m==="url" ? "block" : "none";
+}
+function fill(i){ setMode("text"); $("text").value = samples[i]; }
+function clearAll(){ $("text").value=""; $("url").value=""; $("result").style.display="none"; $("err").style.display="none"; }
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function chips(list, cls){
+  return list.length ? list.map(w => `<span class="chip ${cls}">${esc(w)}</span>`).join("")
+                     : '<span class="note">none found</span>';
+}
+
+async function analyze(){
+  const btn = $("go"), err = $("err");
+  err.style.display = "none";
+  btn.disabled = true; btn.textContent = "Analysing...";
+  const body = mode === "url" ? {url: $("url").value} : {text: $("text").value};
+  try{
+    const res = await fetch("/analyze", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    const d = await res.json();
+    if(!res.ok){ err.textContent = d.error || "Something went wrong."; err.style.display="block"; return; }
+
+    $("badge").textContent = d.label; $("badge").className = "badge " + d.label;
+    $("conf").textContent = d.confidence + "%"; $("mname").textContent = d.model;
+    $("fill").className = d.label; $("fill").style.width = "0";
+    $("result").style.display = "block";
+    setTimeout(() => $("fill").style.width = d.confidence + "%", 50);
+    $("preview").textContent = d.preview ? "Extracted: " + d.preview : "";
+
+    $("votes").innerHTML = d.votes.map(v =>
+      `<tr class="${v.name===d.model?'best':''}"><td>${esc(v.name)}${v.name===d.model?' (best)':''}</td>
+       <td><span class="badge small ${v.label}">${v.label}</span></td><td>${v.confidence}%</td></tr>`).join("");
+
+    const s = d.signals;
+    $("signals").innerHTML = [
+      [s.words,"words"],[s.exclamations,"exclamation marks"],[s.caps_percent+"%","ALL-CAPS words"],
+      [s.clickbait_terms,"clickbait phrases"],[s.avg_word_length,"avg word length"]
+    ].map(x => `<div class="mini"><b>${x[0]}</b><small>${x[1]}</small></div>`).join("");
+    $("flags").innerHTML = d.flags.map(f => `<li>${esc(f)}</li>`).join("");
+
+    $("fw").innerHTML = chips(d.fake_words, "f");
+    $("rw").innerHTML = chips(d.real_words, "r");
+    $("result").scrollIntoView({behavior:"smooth", block:"start"});
+  }catch(e){
+    err.textContent = "Could not reach the server."; err.style.display = "block";
+  }finally{
+    btn.disabled = false; btn.textContent = "Analyse";
+  }
+}
+</script>
+{% endblock %}
